@@ -6,8 +6,6 @@ from typing import List, Dict
 
 load_dotenv()
 
-api_key = os.getenv("API_KEY")
-
 def generate_response(messages: List[Dict]) -> str:
     """Call LLM to get response"""
 
