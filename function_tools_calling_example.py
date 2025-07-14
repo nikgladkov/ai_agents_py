@@ -5,10 +5,10 @@ import sys
 # Using LLM Function Calling for Structured Execution
 
 # 1.Define the Tool Functions
-def double_number(number):
+def double_number(number: int) -> int:
     return int(number)*2
 
-def triple_number(number):
+def triple_number(number: int) -> int:
     return int(number)*3
 
 # 2.Create a Function Registry
@@ -23,10 +23,13 @@ tools = [
         "type": "function",
         "function": {
             "name": "double_number",
-            "description": "Doubles the input integer",
+            "description": "Returns the result of doubling the input integer",
             "parameters": {
-                "type": "integer only",
-                "required": "yes"
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                },
+                "required": ["number"]
             }
         }
     },
@@ -34,10 +37,13 @@ tools = [
         "type": "function",
         "function": {
             "name": "triple_number",
-            "description": "Triples the input integer",
-            "parameters": {
-                "type": "integer only",
-                "required": "yes"
+            "description": "Returns the result of tripling the input integer",
+             "parameters": {
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                },
+                "required": ["number"]
             }
         }
     }
@@ -68,34 +74,39 @@ response = completion(
 # 7. Process the Structured Response
 
 #gets first element from the tool_calls
+
 try:
     tool = response.choices[0].message.tool_calls[0]
 except Exception as e:
     print(f"\nCouldn't determine the tool for the user task \"{user_task}\" : {e}")
     sys.exit()
 
+print(f"\n-------------")
+print(f"\ntool: {tool}")
+
 #gets function name value
 try:
-    tool_name = tool.function.name
+    #tool_name = tool.function.name
+    tool_name = tool.get("function", {}).get("name")
 except Exception as e:
     print(f"\nCouldn't determine the tool for the user task \"{user_task}\" : {e}")
     sys.exit()
+
+print(f"\ntool_name: {tool_name}")
 
 #parses function arguments
 try:
-    tool_args = json.loads(tool.function.arguments)
+    #tool_args = json.loads(tool.function.arguments)
+    tool_args = json.loads(tool.get("function", {}).get("arguments", "{}"))
 except Exception as e:
     print(f"\nCouldn't determine the tool for the user task \"{user_task}\" : {e}")
     sys.exit()
 
-# 8. Execute the Function with the Provided Arguments
+print(f"\ntool_args: {tool_args}")
 
+# 8. Execute the Function with the Provided Arguments
 result = tool_functions[tool_name](**tool_args)
 
-print(f"\n-------------")
-print(f"\ntool: {tool}")
-print(f"\ntool_name: {tool_name}")
-print(f"\ntool_args: {tool_args}")
 print(f"\n-------------")
 print(f"\nuser_task: {user_task}")
 print(f"\nresult: {result}")
