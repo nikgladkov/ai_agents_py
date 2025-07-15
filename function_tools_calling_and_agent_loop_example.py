@@ -5,9 +5,9 @@ from typing import List
 from litellm import completion
 
 # Tools
-def list_files() -> List[str]:
+def list_files(directory=".") -> List[str]:
     """List files in the current directory."""
-    return os.listdir(".")
+    return os.listdir(directory)
 
 def read_file(file_name: str) -> str:
     """Read a file's contents."""
@@ -35,7 +35,16 @@ tools = [
         "function": {
             "name": "list_files",
             "description": "Returns a list of files in the directory.",
-            "parameters": {"type": "object", "properties": {}, "required": []}
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "directory": { 
+                        "type": "string", 
+                        "description": "Path to the directory (default is current directory)." 
+                        }
+                    },
+                    "required": []
+                    }
         }
     },
     {
@@ -73,7 +82,11 @@ You are an AI agent that can perform tasks by using available tools.
 
 If a user asks about files, documents, or content, first list the files before reading them.
 
+If the file mentioned by the user exists in the list, proceed to read it using the read_file tool, even if it was not explicitly asked again.
+
 When you are done, terminate the conversation by using the "terminate" tool and I will provide the results to the user.
+
+You must use tool calls to complete tasks. Do not describe tool usage as text — always use function calling.
 """
 }]
 
@@ -81,11 +94,15 @@ When you are done, terminate the conversation by using the "terminate" tool and 
 iterations = 0
 max_iterations = 10
 
-user_task = input("What would you like me to do? ")
+#user_task = input("\nWhat would you like me to do?\n>")
+
+user_task = "find, read test.txt and terminate"
 
 memory = [{"role": "user", "content": user_task}]
 
 while iterations < max_iterations:
+
+    print(f"\n==Iteration: {iterations}==\n")
 
     messages = agent_rules + memory
 
@@ -97,9 +114,11 @@ while iterations < max_iterations:
         api_base="http://localhost:11434",
         provider="ollama"
     )
+    
+    tool_calls = response.choices[0].message.tool_calls
 
-    if response.choices[0].message.tool_calls[0]:
-        tool = response.choices[0].message.tool_calls[0]
+    if tool_calls and len(tool_calls) > 0:
+        tool = tool_calls[0]
         tool_name = tool.function.name
         tool_args = json.loads(tool.function.arguments)
 
@@ -119,15 +138,24 @@ while iterations < max_iterations:
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
 
+        print("\n--------\n")
         print(f"Executing: {tool_name} with args {tool_args}")
+
+        print("\n--------\n")
+        print(f"{user_task}\n")
+        print(f"Action: {json.dumps(action)}\n")
         print(f"Result: {result}")
+        print("\n--------\n")
 
         memory.extend([
             {"role": "assistant", "content": json.dumps(action)},
-            {"role": "user", "content": json.dumps(result)}
+            {"role": "user", "content": f"User task is {user_task} and result on iteration {iterations} is: {json.dumps(result)}"}
         ])
 
     else:
         result = response.choices[0].message.content
+        print("\nNo tool call from model!\n")
         print(f"Response: {result}")
         break
+    
+    iterations += 1
