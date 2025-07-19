@@ -51,11 +51,18 @@ tools = [
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Reads the content of a specified file in the directory.",
+            "description": "Reads the content of a file",
             "parameters": {
                 "type": "object",
-                "properties": {"file_name": {"type": "string"}},
-                "required": ["file_name"]
+                "properties": {
+                    "file_name": 
+                        {
+                            "type": "string"
+                        }
+                    },
+                "required": [
+                    "file_name"
+                    ]
             }
         }
     },
@@ -96,7 +103,7 @@ max_iterations = 10
 
 #user_task = input("\nWhat would you like me to do?\n>")
 
-user_task = "find, read test.txt and terminate"
+user_task = "find the file with name \"test.txt\", when you have found it read this file"
 
 memory = [{"role": "user", "content": user_task}]
 
@@ -107,55 +114,59 @@ while iterations < max_iterations:
     messages = agent_rules + memory
 
     response = completion( 
-        model="ollama/chevalblanc/gpt-4o-mini:latest", 
+        model="ollama/llama3.1:latest",
         messages=messages, 
-        tools=tools, 
+        tools=tools,
+        tool_choice="auto",
         max_tokens=1024,
         api_base="http://localhost:11434",
         provider="ollama"
     )
     
+    response_message = response.choices[0].message
+    
     tool_calls = response.choices[0].message.tool_calls
 
-    if tool_calls and len(tool_calls) > 0:
-        tool = tool_calls[0]
-        tool_name = tool.function.name
-        tool_args = json.loads(tool.function.arguments)
+    #if tool_calls and len(tool_calls) > 0:
+    
+    tool = tool_calls[0]
+    tool_name = tool.function.name
+    tool_args = json.loads(tool.function.arguments)
 
-        action = {
-            "tool_name": tool_name,
-            "args": tool_args
-        }
+    action = {
+        "tool_name": tool_name,
+        "args": tool_args
+    }
 
-        if tool_name == "terminate":
-            print(f"Termination message: {tool_args['message']}")
-            break
-        elif tool_name in tool_functions:
-            try:
-                result = {"result": tool_functions[tool_name](**tool_args)}
-            except Exception as e:
-                result = {"error":f"Error executing {tool_name}: {str(e)}"}
-        else:
-            result = {"error": f"Unknown tool: {tool_name}"}
-
-        print("\n--------\n")
-        print(f"Executing: {tool_name} with args {tool_args}")
-
-        print("\n--------\n")
-        print(f"{user_task}\n")
-        print(f"Action: {json.dumps(action)}\n")
-        print(f"Result: {result}")
-        print("\n--------\n")
-
-        memory.extend([
-            {"role": "assistant", "content": json.dumps(action)},
-            {"role": "user", "content": f"User task is {user_task} and result on iteration {iterations} is: {json.dumps(result)}"}
-        ])
-
-    else:
-        result = response.choices[0].message.content
-        print("\nNo tool call from model!\n")
-        print(f"Response: {result}")
+    if tool_name == "terminate":
+        print(f"Termination message: {tool_args['message']}")
         break
+    elif tool_name in tool_functions:
+        try:
+            result = {"result": tool_functions[tool_name](**tool_args)}
+        except Exception as e:
+            result = {"error":f"Error executing {tool_name}: {str(e)}"}
+    else:
+        result = {"error": f"Unknown tool: {tool_name}"}
+
+    print("\n--------\n")
+    print(f"Executing: {tool_name} with args {tool_args}")
+
+    print("\n--------\n")
+    print(f"{user_task}\n")
+    print(f"Action: {json.dumps(action)}\n")
+    print(f"Result: {result}")
+    print("\n--------\n")
+
+    memory.extend([
+        {"role": "assistant", "content": json.dumps(action)},
+        {"role": "user", "content": json.dumps(result)}
+    ])
+
+    #else:
+        # result = response.choices[0].message.content
+        # print("\nNo tool call from model!\n")
+        # print(f"Response: {result}")
+        # break
     
     iterations += 1
