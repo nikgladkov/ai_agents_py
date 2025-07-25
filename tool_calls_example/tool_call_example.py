@@ -1,5 +1,3 @@
-import json
-import os
 from typing import List
 
 from litellm import completion
@@ -28,17 +26,20 @@ response = completion(
     provider="ollama"
 )
 
+response_type = type(response)
+print(f"\n\nType of response:\n{response_type}")
+
 raw_response = response
-print(f"\n\nraw_response:\n{raw_response}")
+print(f"\n\nRaw response:\n{raw_response}")
 
 message = response.choices[0].message
-print(f"\n\nmessage:\n{message}")
+print(f"\n\nMessage:\n{message}")
 
 tool_calls = message.tool_calls
-print(f"\n\ntool_calls:\n{tool_calls}")
+print(f"\n\nTool calls:\n{tool_calls}")
 
 for i, call in enumerate(message.tool_calls, 0):
-    print(f"\n\ntool_call #{i+1}:\n{call}")
+    print(f"\n\nTool call #{i+1}:\n{call}")
     tool_call = tool_calls[i]
     tool_name = tool_call.function.name
-    print(f"\ntool_name:\n{tool_name}")
+    print(f"\nTool name:\n{tool_name}")
