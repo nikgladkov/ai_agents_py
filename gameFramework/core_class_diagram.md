@@ -1,86 +1,90 @@
 ```mermaid
 classDiagram
-    class Goal {
-        <<dataclass>>
-        int priority
-        str name
-        str description
 
-        __init__()
-    }
+%% Классы данных
+class Prompt {
+  +List~Dict~ messages
+  +List~Dict~ tools
+  +dict metadata
+}
 
-    class Action {
-        str name
-        Callable function
-        str description
-        Dict parameters
-        bool terminal
+class Goal {
+  +int priority
+  +str name
+  +str description
+}
 
-        __init__()
-        execute(**args) Any
-	}
+%% Action-related
+class Action {
+  +str name
+  +Callable function
+  +str description
+  +Dict parameters
+  +bool terminal
+  +execute(**args) Any
+}
 
-	class ActionRegistry {
-        Dict actions
+class ActionRegistry {
+  -Dict~str, Action~ actions
+  +register(action: Action)
+  +get_action(name: str) Action
+  +get_actions() List~Action~
+}
 
-        __init__()
-        register(action: Action)
-        get_action(name: str) Action
-        get_actions() List~Action~
-    }
+ActionRegistry --> Action
 
-    class Action
+%% Memory
+class Memory {
+  -List~dict~ items
+  +add_memory(memory: dict)
+  +get_memories(limit: int) List~Dict~
+}
 
-    ActionRegistry --> Action : uses
+%% Environment
+class Environment {
+  +execute_action(action: Action, args: dict) dict
+  +format_result(result: Any) dict
+}
 
-	class Memory {
-		Dict items
+Environment --> Action
 
-		__init__()
-		add_memory(memory: dict)
-		get_memories(limit: int) List[Dict]
-	}
+%% AgentLanguage и подклассы
+class AgentLanguage {
+  +construct_prompt(actions, environment, goals, memory) Prompt
+  +parse_response(response: str) dict
+}
 
-	class Environment {
-		execute_action(action: Action, args: dict) Dict
-		format_result(result: Any) Dict
-	}
+class AgentFunctionCallingActionLanguage {
+  +format_goals(goals: List~Goal~) List
+  +format_memory(memory: Memory) List
+  +format_actions(actions: List~Action~) List
+  +construct_prompt(...)
+  +parse_response(response: str) dict
+  +adapt_prompt_after_parsing_error(...)
+}
 
-    class Action
+AgentFunctionCallingActionLanguage --|> AgentLanguage
 
-    Environment --> Action : uses
+%% Agent
+class Agent {
+  -List~Goal~ goals
+  -AgentLanguage agent_language
+  -ActionRegistry actions
+  -Callable generate_response
+  -Environment environment
+  +construct_prompt(...)
+  +prompt_llm_for_action(...)
+  +get_action(...)
+  +update_memory(...)
+  +set_current_task(...)
+  +should_terminate(...)
+  +run(...) Memory
+}
 
-	class Agent {
-        List~Goal~ goals
-        Callable~Prompt -> str~ generate_response
-        AgentLanguage agent_language
-        ActionRegistry actions
-        Environment environment
-
-        __init__()
-        construct_prompt(goals: List[Goal], memory: Memory, actions: ActionRegistry) Prompt
-        prompt_llm_for_action(full_prompt: Prompt) str
-        get_action(response)
-        should_terminate(response: str) bool
-        set_current_task(memory: Memory, task: str)
-        update_memory(memory: Memory, response: str, result: dict)
-        run(user_input: str, memory=None, max_iterations: int = 50) -> Memory
-    }
-
-    class ActionRegistry
-    class AgentLanguage
-    class Environment
-    class Goal
-    class Memory
-    class Prompt
-
-    Agent --> ActionRegistry : uses
-    Agent --> AgentLanguage : uses
-    Agent --> Environment : uses
-    Agent --> Goal : uses
-    Agent --> Memory : uses
-    Agent --> Prompt : uses
-
-
-
+Agent --> Goal
+Agent --> AgentLanguage
+Agent --> ActionRegistry
+Agent --> Environment
+Agent --> Prompt
+Agent --> Memory
 ```

@@ -1,7 +1,17 @@
-from dataclasses import dataclass
+# Adapted from an example provided in a Coursera course - AI Agents and Agentic AI with Python & Generative AI
+# Original code: https://colab.research.google.com/drive/1FezaORGZ4qSznCEZRQOwUUiiSeYCDa5z?usp=sharing#scrollTo=6PC3ncxezoJC
+
+from dataclasses import dataclass, field
+import json
 import time
 import traceback
 from typing import Any, Callable, Dict, List
+
+@dataclass
+class Prompt:
+    messages: List[Dict] = field(default_factory=list)
+    tools: List[Dict] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)  # Fixing mutable default issue
 
 # G - goal
 @dataclass(frozen=True)
@@ -77,6 +87,109 @@ class Environment:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z")
         }
         
+class AgentLanguage:
+    def __init__(self):
+        pass
+
+    def construct_prompt(self,
+                         actions: List[Action],
+                         environment: Environment,
+                         goals: List[Goal],
+                         memory: Memory) -> Prompt:
+        raise NotImplementedError("Subclasses must implement this method")
+
+
+    def parse_response(self, response: str) -> dict:
+        raise NotImplementedError("Subclasses must implement this method")
+
+class AgentFunctionCallingActionLanguage(AgentLanguage):
+
+    def __init__(self):
+        super().__init__()
+
+    def format_goals(self, goals: List[Goal]) -> List:
+        # Map all goals to a single string that concatenates their description
+        # and combine into a single message of type system
+        sep = "\n-------------------\n"
+        goal_instructions = "\n\n".join([f"{goal.name}:{sep}{goal.description}{sep}" for goal in goals])
+        return [
+            {"role": "system", "content": goal_instructions}
+        ]
+
+    def format_memory(self, memory: Memory) -> List:
+        """Generate response from language model"""
+        # Map all environment results to a role:user messages
+        # Map all assistant messages to a role:assistant messages
+        # Map all user messages to a role:user messages
+        items = memory.get_memories()
+        mapped_items = []
+        for item in items:
+
+            content = item.get("content", None)
+            if not content:
+                content = json.dumps(item, indent=4)
+
+            if item["type"] == "assistant":
+                mapped_items.append({"role": "assistant", "content": content})
+            elif item["type"] == "environment":
+                mapped_items.append({"role": "assistant", "content": content})
+            else:
+                mapped_items.append({"role": "user", "content": content})
+
+        return mapped_items
+
+    def format_actions(self, actions: List[Action]) -> [List,List]:
+        """Generate response from language model"""
+
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": action.name,
+                    # Include up to 1024 characters of the description
+                    "description": action.description[:1024],
+                    "parameters": action.parameters,
+                },
+            } for action in actions
+        ]
+
+        return tools
+
+    def construct_prompt(self,
+                         actions: List[Action],
+                         environment: Environment,
+                         goals: List[Goal],
+                         memory: Memory) -> Prompt:
+
+        prompt = []
+        prompt += self.format_goals(goals)
+        prompt += self.format_memory(memory)
+
+        tools = self.format_actions(actions)
+
+        return Prompt(messages=prompt, tools=tools)
+
+    def adapt_prompt_after_parsing_error(self,
+                                         prompt: Prompt,
+                                         response: str,
+                                         traceback: str,
+                                         error: Any,
+                                         retries_left: int) -> Prompt:
+
+        return prompt
+
+    def parse_response(self, response: str) -> dict:
+        """Parse LLM response into structured format by extracting the ```json block"""
+
+        try:
+            return json.loads(response)
+
+        except Exception as e:
+            return {
+                "tool": "terminate",
+                "args": {"message":response}
+            }
+        
 class Agent:
     def __init__(self,
                  goals: List[Goal],
@@ -114,13 +227,7 @@ class Agent:
         action = self.actions.get_action(invocation["tool"])
         return action, invocation
 
-    def should_terminate(self, response: str) -> bool:
-        action_def, _ = self.get_action(response)
-        return action_def.terminal
-
-    def set_current_task(self, memory: Memory, task: str):
-        memory.add_memory({"type": "user", "content": task})
-
+    # Updating Memory
     def update_memory(self, memory: Memory, response: str, result: dict):
         """
         Update memory with the agent's decision and the environment's response.
@@ -131,6 +238,14 @@ class Agent:
         ]
         for m in new_memories:
             memory.add_memory(m)
+            
+    def set_current_task(self, memory: Memory, task: str):
+        memory.add_memory({"type": "user", "content": task})
+
+    # Termination Check
+    def should_terminate(self, response: str) -> bool:
+        action_def, _ = self.get_action(response)
+        return action_def.terminal
 
     def run(self, user_input: str, memory=None, max_iterations: int = 50) -> Memory:
         """
